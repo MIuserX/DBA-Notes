@@ -21,10 +21,19 @@
 
 ## Master 需要做什么准备？
 
-* 进行一次 basebackup ，作为 Standby 的起点
-* `wal_level` 调整到满足流复制的级别
-* `max_wal_senders` 设置 wal sender process 的数量上限
-* `max`
+#### WAL 级别
+
+流式复制是通过 Master 向 Standby 发送 WAL，Standby 重放 WAL 完成的，而 Master 记录 WAL 是分级别的。要搭建流复制集群，Master 首先做的是设置 <span style="color:lightblue">wal_receiver_timeout</span> 到支持流复制的级别。
+
+
+
+#### 准备 WAL sender 和 replication slot
+
+* <span style="color:lightblue">wal_sender_timeout</span>
+* <span style="color:lightblue">max_wal_senders</span>
+* <span style="color:lightblue">max_replication_slot</span>
+
+
 
 
 
@@ -48,7 +57,10 @@
 
 #### 防止从库追不上
 
-**wal_keep_segments**
+* <span style="color:lightblue">wal_keep_segments</span>
+* <span style="color:lightblue">vacuum_defer_cleanup_age</span>
+
+
 
 
 
@@ -79,6 +91,8 @@ WAL receiver process 不仅仅是单向的从 Master 哪获取信息，还会向
 
 
 
+
+
 美好的日子里，Standby 不断获取 WAL（无论是通过 streaming replication、local pg_wal 或者 WAL archive）并 replay。但偶尔也会出一些意外，比较极端的情况下，Standby 无法通过任何途径获取到 WAL 。这时参数：
 
 * <span style="color:lightblue">wal_retrieve_retry_interval</span>
@@ -87,16 +101,64 @@ WAL receiver process 不仅仅是单向的从 Master 哪获取信息，还会向
 
 
 
-一般情况下，从库是可以执行只读查询的。PG 允许通过  参数来控制是否开启 readonly。相关的参数如下：
+#### readonly
+
+一般情况下，从库是可以执行只读查询的。PG 允许通过参数来控制是否开启 readonly。相关的参数如下：
 
 * <span style="color:lightblue">hot_standby</span> (boolean)
 * <span style="color:lightblue">hot_standby_feedback</span> (boolean)
-* <span style="color:lightblue">max_standby_streaming_delay</span> ()
-* <span style="color:lightblue">hot_standby_feedback</span> ()
+* <span style="color:lightblue">max_standby_streaming_delay</span> (integer)
+* <span style="color:lightblue">max_standby_archive_delay</span> (integer)
 
-如果开启 readonly，
+如果开启 readonly，有可能会出现这样的场景：
+
+> Standby 上的 SQL A 开始执行，在执行的过程中，它所需要的数据被 Master 上的 SQL B 删除了。收到 WAL 需要决定是取消 SQL A 的执行还是延迟 replay WAL 。
+>
+> 这是因为在一个 Node 上的 SQL 处于一个上下文中，DBMS 可以检测到这种情况，并自行决定。但 Master 和 Standby 显然是两个上下文。
+>
+> 那有没有办法让他们在一个上下文呢？
+
+<span style="color:lightblue">hot_standby_feedback</span> 是这样参数，它允许 Standby 向 Master 发送正在执行的 readonly SQL 的信息。发送信息的频率受 <span style="color:lightblue">wal_receiver_status_interval</span> 限制。
+
+WAL 总是要被 replay 的，当 Standby 通过 WAL archive 获取 WAL 时，Standby 会在冲突发生时最多延迟 <span style="color:lightblue">max_standby_archive_delay</span> 时间后，取消 SQL 并 replay SQL。当 Standby 通过 streaming replication 获取 WAL 时，Standby 会在冲突发生时最多延迟 <span style="color:lightblue">max_standby_streaming_delay</span> 时间后，取消 SQL 并 replay SQL。
 
 
 
 
+
+
+
+
+
+## synchronous replication
+
+
+
+# Replication slot
+
+复制槽的存在是为了解决如下问题：
+
+> WAL segments 需要在所有 Standby 接收到之后才能够被删除。
+
+这里需要讲些关于流复制的历史。
+
+replication slot 在 9.4 才被引入，在这之前，通过 <span style="color:lightblue">wal_keep_segments</span> 来解决这个问题，但这个方法非常粗糙，只是通过保留尽可能多的 WAL segments 来保证。如果 Standby 断开时间过长，可能会发生需要的 WAL segments 已经被删除的问题，这是 Standby 将无法进行 streaming replication。
+
+但复制槽仅仅保留那些还被 Standby 需要的，不会保留多余的，解决的更加精确。
+
+
+
+
+
+# hot_standby_feedback
+
+
+
+
+
+# Reference Links
+
+https://hevodata.com/learn/postgresql-replication-slots/
+
+https://www.cybertec-postgresql.com/en/what-hot_standby_feedback-in-postgresql-really-does/
 
