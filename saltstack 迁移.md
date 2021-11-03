@@ -50,8 +50,15 @@ http://www.opscoder.info/move_salt_master.html
 
 base 目录是别 git 管理的，所以这一步使用 git clone 即可：
 
-```
-[root@l-pgdba2.vc.cn2 ``/home/q/pgdba``]``# git clone git@gitlab.corp.qunar.com:pgdba/salt.git base``Initialized empty Git repository ``in` `/home/q/pgdba/base/``.git/``remote: Counting objects: 4277, ``done``.``remote: Compressing objects: 100% (2569``/2569``), ``done``.``remote: Total 4277 (delta 2914), reused 2526 (delta 1646)``Receiving objects: 100% (4277``/4277``), 104.18 MiB | 87.43 MiB``/s``, ``done``.``Resolving deltas: 100% (2914``/2914``), ``done``.``[root@l-pgdba2.vc.cn2 ``/home/q/pgdba``]``#
+```bash
+[root@xxx /home/q/pgdba]# git clone git@gitlab.YYY.com:pgdba/salt.git 
+base Initialized empty Git repository in /home/q/pgdba/base/.git/
+remote: Counting objects: 4277, done.
+remote: Compressing objects: 100% (2569/2569), done.
+remote: Total 4277 (delta 2914), reused 2526 (delta 1646)
+Receiving objects: 100% (4277/4277), 104.18 MiB | 87.43 MiB/s, done.
+Resolving deltas: 100% (2914/2914), done.
+[root@xxx /home/q/pgdba]#
 ```
 
 
@@ -60,28 +67,34 @@ base 目录是别 git 管理的，所以这一步使用 git clone 即可：
 
 #### C. new_host 上建立软链：/home/q/pgdba/etc/master => /home/q/pgdba/base/conf/etc.master
 
-```
-[root@l-pgdba2.vc.cn2 ``/home/q/pgdba/etc``]``# ln -s /home/q/pgdba/base/conf/etc.master master ``[root@l-pgdba2.vc.cn2 ``/home/q/pgdba/etc``]``# ll``total 28``lrwxrwxrwx 1 root root  34 Oct 17 15:47 master -> ``/home/q/pgdba/base/conf/etc``.master``-rw-r--r-- 1 root root 24084 Sep 12 20:30 minion``drwxr-xr-x 3 root root 4096 Sep 12 20:30 salt
+```bash
+[root@zzz /home/q/pgdba/etc]# ln -s /home/q/pgdba/base/conf/etc.master master [root@zzz /home/q/pgdba/etc]# ll
+total 28
+lrwxrwxrwx 1 root root  34 Oct 17 15:47 master -> /home/q/pgdba/base/conf/etc.master
+-rw-r--r-- 1 root root 24084 Sep 12 20:30 minion
+drwxr-xr-x 3 root root 4096 Sep 12 20:30 salt
 ```
 
 
 
 #### D. 编辑 /etc/profile
 
+```bash
+# 在 /etc/profile 最后加入下面这行
+export SALT_MASTER_CONFIG=/home/q/pgdba/etc/master
 ```
-# 在 /etc/profile 最后加入下面这行``export` `SALT_MASTER_CONFIG=``/home/q/pgdba/etc/master
-```
 
 
 
-#### E. 复制 [l-pgdata3.vc](http://l-pgdata3.vc).cn5.qunar.[com:/home/q/pgdba/etc/salt/pki](http://com/home/q/pgdba/etc/salt/pki) 目录到 [new_host:/home/q/pgdba/etc/salt/pki](http://new_host/home/q/pgdba/etc/salt/pki)
+#### E. 复制 [xxx](http://xxx:/home/q/pgdba/etc/salt/pki](http://com/home/q/pgdba/etc/salt/pki) 目录到 [new_host:/home/q/pgdba/etc/salt/pki](http://new_host/home/q/pgdba/etc/salt/pki)
 
 
 
 #### F. 启动 new_host 上的新 master
 
-```
-[root@l-pgdba2.vc.cn2 ``/home/q/pgdba``]``# /etc/init.d/pg-salt-master start``Starting salt-master daemon:                [ OK ]
+```bash
+[root@zzz /home/q/pgdba]# /etc/init.d/pg-salt-master start
+Starting salt-master daemon:                [ OK ]
 ```
 
 
@@ -122,10 +135,12 @@ master 端 test.ping 某个 minion 时，显示 No response 类似的结果。
 
 ### 现象
 
-![img](https://wiki.corp.qunar.com/confluence/download/attachments/213208628/image2018-11-16_15-34-4.png?version=1&modificationDate=1542353644000&api=v2)
-
-```
-# 产生了两个 centos03 的``#``[root@centos02 master]``# pg-salt 'centos0[1-3]' test.ping``centos01:``  ``True``centos03:``  ``True``centos03:``  ``True
+```bash
+# 产生了两个 centos03 
+[root@centos02 master]# pg-salt 'centos0[1-3]' test.ping
+centos01:  True
+centos03:  True
+centos03:  True
 ```
 
 
@@ -136,12 +151,21 @@ master 端 test.ping 某个 minion 时，显示 No response 类似的结果。
 
 解决：直留一个 pg-salt-minion 进程就行
 
-#### 2、minion 端的配置文件()中把同一个 master 机器配置了两遍
-
-![img](https://wiki.corp.qunar.com/confluence/download/attachments/213208628/image2018-11-16_15-39-25.png?version=1&modificationDate=1542353966000&api=v2)
+#### 2、minion 端的配置文件中把同一个 master 机器配置了两遍
 
 ```
-# 下面是 minion 端 xxx 文件的一个片段，``# centos01 和 centos02.qunar.com 是一个机器，``# 但被写了两次，导致 master 端(centos2) 得到了两次回应。``#``......` `master:`` ``- centos02`` ``- centos02.qunar.com`` ``- l-pgdata3.vc.cn5.qunar.com`` ``- l-pgdba2.vc.cn2.qunar.com` `......``......
+# 下面是 minion 端 xxx 文件的一个片段，
+# centos01 和 centos02.qunar.com 是一个机器，
+# 但被写了两次，导致 master 端(centos2) 得到了两次回应。
+#
+......
+master: 
+  - centos02 
+  - centos02
+  - xxx
+  - zzz
+  ......
+......
 ```
 
 
